@@ -1,0 +1,51 @@
+[project]
+name = "rag-production"
+version = "0.2.0"
+description = "Production-style RAG service: hybrid retrieval (BM25 + vector, RRF), LangGraph pipeline with SQLite memory, FastAPI API."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "bs4>=0.0.2",
+    "fastapi>=0.129.0",
+    "langchain>=1.2.7",
+    "langchain-anthropic>=1.3.1",
+    "langchain-chroma>=1.1.0",
+    "langchain-community>=0.4.1",
+    "langchain-core>=1.2.7",
+    "langchain-ollama>=1.0.1",
+    "langchain-openai>=1.1.7",
+    "langgraph>=1.0.7",
+    "langgraph-checkpoint-sqlite>=3.0.3",
+    "pydantic-settings>=2.15.0",
+    "pypdf>=6.6.2",
+    "pytest>=9.0.2",
+    "python-dotenv>=1.2.1",
+    "python-multipart>=0.0.32",
+    "rank-bm25>=0.2.2",
+    "uvicorn>=0.40.0",
+]
+
+[project.optional-dependencies]
+# Multi-replica conversation memory (CHECKPOINTER_BACKEND=postgres): `uv sync --extra postgres`
+postgres = [
+    "langgraph-checkpoint-postgres>=3.0.0",
+    "psycopg[binary,pool]>=3.2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "rag_app"   # src/rag_app
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]          # lets tests import shared helpers from tests/support.py
+addopts = "-q"
+markers = [
+    "chroma_server: needs the `chroma` CLI (bundled with chromadb) to start a local Chroma server",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
