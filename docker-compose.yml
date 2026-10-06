@@ -1,0 +1,70 @@
+# api (N uvicorn workers) + Chroma server. Durable state lives in volumes, so the api
+# container is stateless and can be scaled: `docker compose up -d --scale api=3`
+# (put a load balancer in front and use Postgres + Redis for multi-replica, see README).
+services:
+  api:
+    build: .
+    image: rag-production:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATA_DIR: /data
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
+      WEB_CONCURRENCY: "2"          # safe: vector store is the shared Chroma server
+      JOB_STORE_BACKEND: sqlite     # job status shared by workers in this container
+      CHECKPOINTER_BACKEND: sqlite  # switch to postgres for >1 replica (profile below)
+      OLLAMA_BASE_URL: http://ollama:11434
+    ports:
+      - "8000:8000"
+    volumes:
+      - api-data:/data              # SQLite checkpoints + jobs
+    depends_on:
+      chroma:
+        condition: service_started  # the app also retries the connection on boot
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  chroma:
+    image: chromadb/chroma:1.5.9    # keep in sync with the chromadb client in uv.lock
+    volumes:
+      - chroma-data:/data
+    environment:
+      ANONYMIZED_TELEMETRY: "FALSE"
+    expose:
+      - "8000"                      # internal only; add "8001:8000" under ports to inspect
+    restart: unless-stopped
+
+  # Optional: `docker compose --profile postgres up -d`, build with
+  # `--build-arg UV_EXTRAS=postgres`, and set CHECKPOINTER_BACKEND=postgres +
+  # POSTGRES_URL=postgresql://rag:rag@postgres:5432/rag in .env
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag        # dev only - use a secret in production
+      POSTGRES_DB: rag
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Optional local embeddings: `docker compose --profile ollama up -d`, then
+  # `docker compose exec ollama ollama pull nomic-embed-text`, EMBEDDINGS_PROVIDER=ollama
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  api-data:
+  chroma-data:
+  pg-data:
+  ollama-models:
